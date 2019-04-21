@@ -247,7 +247,7 @@ static int proc_sadc_battery_show(struct seq_file *m, void *v)
 		else
 			battery_mv_usb = mv;
 #ifndef CHARGE_DET
-		if(mv > 3950)
+		if(mv > BAT_FULL_VALUE)
 			mv = BAT_FULL_VALUE;
 #endif
 
@@ -277,7 +277,9 @@ static struct task_struct * battery_monitor;
 
 
 #define POWEROFF_VOL 3550 //3620
+#ifdef CONFIG_PM
 extern int jz_pm_hibernate(void);
+#endif
 extern void run_sbin_poweroff();
 
 static void battery_track_timer(unsigned long data)
@@ -315,7 +317,9 @@ static void battery_track_timer(unsigned long data)
 				{
 					printk("the power is too low do hibernate!!!!!\n");
 					run_sbin_poweroff();
+#ifdef CONFIG_PM
 					jz_pm_hibernate();
+#endif
 				}
 				printk("------- %s %d \n",__func__,__LINE__);
 			}

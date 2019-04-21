@@ -462,7 +462,7 @@ static void enable_jzsoc_gpu_clock(void)
 	{
 		/* GPU CLK2x 200MHz -- 250MHz */
 #define GPU_CLK_MAX 250000000
-//		extern unsigned int cpm_get_pllout1(void);
+		extern unsigned int cpm_get_pllout1(void);
 		unsigned int GPUCDR_VAL=0;
 		int div;
 		int gpu_use_pll1 = 1;

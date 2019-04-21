@@ -3159,8 +3159,10 @@ static struct platform_driver snd_plat_driver = {
 		.name	= "mixer",
 		.owner	= THIS_MODULE,
 	},
+#ifdef CONFIG_PM
 	.suspend	= jz_i2s_suspend,
 	.resume		= jz_i2s_resume,
+#endif
 };
 
 static int __init snd_init(void)

@@ -237,7 +237,9 @@ void __init plat_mem_setup(void)
 
 	_machine_restart = jz_restart;
 	_machine_halt = jz_halt;
+#ifdef CONFIG_PM
 	pm_power_off = jz_pm_hibernate;
+#endif
 
 	jz_soc_setup();
 	jz_serial_setup();

@@ -56,8 +56,8 @@ static const struct {
 	{ .gpio = UMIDO_KEY_DOWN,	.actlow = 1, 	.ncode = KEY_DOWN,	.scode = KEY_VOLUMEDOWN,	.sysrq = 'u'	}, /* D-pad down */
 	{ .gpio = UMIDO_KEY_LEFT,	.actlow = 1,	.ncode = KEY_LEFT,	.scode = KEY_BRIGHTNESSDOWN,	.sysrq = 'e'	}, /* D-pad left */
 	{ .gpio = UMIDO_KEY_RIGHT,	.actlow = 1,	.ncode = KEY_RIGHT,	.scode = KEY_BRIGHTNESSUP,	.sysrq = 'i'	}, /* D-pad right */
-	{ .gpio = UMIDO_KEY_A,	.actlow = 1,	.ncode = KEY_LEFTCTRL,							}, /* A button */
-	{ .gpio = UMIDO_KEY_B,	.actlow = 1,	.ncode = KEY_LEFTALT,							}, /* B button */
+	{ .gpio = UMIDO_KEY_A,	.actlow = 1,	.ncode = KEY_LEFTALT,							}, /* A button */
+	{ .gpio = UMIDO_KEY_B,	.actlow = 1,	.ncode = KEY_LEFTCTRL,							}, /* B button */
 	{ .gpio = UMIDO_KEY_X,	.actlow = 1,	.ncode = KEY_SPACE,							}, /* X button */
 	{ .gpio = UMIDO_KEY_Y,	.actlow = 1,	.ncode = KEY_LEFTSHIFT,							}, /* Y button */
 	{ .gpio = UMIDO_KEY_START,	.actlow = 0,	.ncode = KEY_ENTER,							}, /* START button(SYSRQ) */

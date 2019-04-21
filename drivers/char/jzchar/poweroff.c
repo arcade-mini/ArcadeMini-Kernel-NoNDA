@@ -56,7 +56,13 @@ MODULE_LICENSE("GPL");
 #define GPIO_PW_I               GPIO_WAKEUP
 #define POWEROFF_PIN_DOWN       0
 #define SET_POWEROFF_PIN_AS_IRQ __gpio_as_irq_fall_edge(POWEROFF_PIN)
+
+#ifndef CONFIG_PM
+#define DO_SHUTDOWN_SYSTEM
+#else
 #define DO_SHUTDOWN_SYSTEM      jz_pm_hibernate()
+#endif
+
 #if 0
 #define DO_SUSPEND { \
 	    jz_pm_sleep();\
@@ -83,9 +89,11 @@ static int num_seconds = 0;
 extern int jz_udc_active;
 #endif
 
+#ifdef CONFIG_PM
 extern void jz_pm_suspend(void);
 extern int jz_pm_hibernate(void);
 extern int jz_pm_sleep(void);
+#endif
 
 extern unsigned int medive_flag;
 
@@ -288,7 +296,7 @@ static irqreturn_t poweroff_irq(int irq, void *dev_id)
 }
 
 #ifndef CONFIG_PM
-
+/*
 static struct pm_dev *poweroff_dev;
 
 static int poweroff_suspend(int *poweroff , int state)
@@ -331,7 +339,7 @@ static int poweroff_pm_callback(struct pm_dev *pm_dev, pm_request_t rqst, void *
 
 	return ret;
 }
-
+*/
 #endif /* CONFIG_PM */
 
 #ifdef USE_SUSPEND_HOTPLUG
@@ -436,7 +444,7 @@ static int proc_power_write_proc(
 	if (shutdown_flag == 1){
 		printk("\n medive  write  power proc \n");
 		shutdown_flag = 0;
-		jz_pm_hibernate();
+		//jz_pm_hibernate();
 	}
 	return count;
 }
@@ -466,10 +474,10 @@ static int __init poweroff_init(void)
 	}
 
 #ifndef CONFIG_PM
-	poweroff_dev = pm_register(PM_SYS_DEV, PM_SYS_UNKNOWN, poweroff_pm_callback);
+	/*poweroff_dev = pm_register(PM_SYS_DEV, PM_SYS_UNKNOWN, poweroff_pm_callback);
 	if (poweroff_dev) {
 		poweroff_dev->data = &poweroff_dev;
-	}
+	}*/
 #endif
 	/* medive change */
 	res = create_proc_entry("jz/poweroff", 0, NULL);

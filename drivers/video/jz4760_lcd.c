@@ -55,8 +55,6 @@
 #include "jz_kgm_spfd5420a.h"
 #endif
 
-#include "bootpic.h"
-
 extern unsigned char *vmfbmem_addr;
 extern u32 phy_vmfbmem_addr;
 static int tvout_640_480 = 0;
@@ -67,15 +65,16 @@ static unsigned int tvout_flag  = 0;
 static unsigned int backlight_value = 80;
 static int thread_init_end = 0;
 static int resize_go_out = 0;
-static int tvout_display_w = 320;
-static int tvout_display_h = 240;
+//static int tvout_display_w = 320;
+//static int tvout_display_h = 240;
+static int tvout_display_w = 480;
+static int tvout_display_h = 272;
 unsigned char *lcd_frame0,*lcd_frame01,*lcd_frame0_ipu_src;
-#define TVOUT_2x
+//#define TVOUT_2x
 
 static unsigned int lcd_flush_flag = 1;
 unsigned int panle_mode = 0;
 static unsigned int tvout_flag2 = 0;
-static unsigned int lcd_a320_flag = 0;
 static struct timer_list avout_irq_timer;
 static struct timer_list hdmi_irq_timer;
 int panel_mode = PANEL_MODE_LCD_PANEL;
@@ -87,9 +86,6 @@ extern void ipu_driver_close_tv(void);
 extern void ipu_driver_open_tv(int,int,int,int);
 extern void ipu_driver_flush_tv(void);
 extern void ipu_driver_wait_end();
-
-static void fb_resize_a320_original_start();
-static void fb_resize_a320_fullscreen_start();
 
 #if 1
 #define D(fmt, args...)
@@ -157,7 +153,6 @@ struct jz4760lcd_info jz4760_lcd_panel = {
 		 .fg1 = {16, 0, 0, 720, 573}, /* bpp, x, y, w, h */
 	 },
 #elif defined(CONFIG_JZ4760_LCD_TOPPOLY_TD043MGEB1)
-        sdf
 	.panel = {
 		.cfg = LCD_CFG_LCDPIN_LCD | LCD_CFG_RECOVER | /* Underrun recover */
 		LCD_CFG_NEWDES | /* 8words descriptor */
@@ -221,14 +216,16 @@ struct jz4760lcd_info jz4760_lcd_panel = {
 		.cfg = LCD_CFG_LCDPIN_LCD | LCD_CFG_RECOVER | /* Underrun recover */ 
 			   LCD_CFG_NEWDES |
 			   LCD_CFG_MODE_GENERIC_TFT | /* General TFT panel */
-			   LCD_CFG_MODE_TFT_24BIT |	/* output 18bpp */
+			   LCD_CFG_MODE_TFT_18BIT |	/* output 18bpp */
 			   LCD_CFG_HSP | 		   /* Hsync polarity: active low */
 			   LCD_CFG_VSP, 
 		
 		.slcd_cfg = 0,
 		.ctrl = LCD_CTRL_OFUM | LCD_CTRL_BST_16,	/* 16words burst, enable out FIFO underrun irq */
-	//	480, 272, 59, 41, 10, 2, 2, 2, 2,
-		480, 272, 80, 5, 5, 20, 5, 10, 5, //gl
+		480, 272, 59, 41, 10, 2, 2, 2, 2,
+		/* The lines below were enabled. And for some reasons, they cause issues on black levels. 
+		 * The above was commented out. But it turns out it works fine. I wonder why ??? - Gameblabla */
+		//480, 272, 80, 5, 5, 20, 5, 10, 5, //gl
 	},
 	
 	.osd = {
@@ -879,9 +876,6 @@ static int jz4760fb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 }
 
 static struct task_struct * resize_task;
-static struct task_struct * resize_a320_original_task = NULL;
-static struct task_struct * resize_a320_full_screen_task = NULL;
-unsigned int resize_a320_go_out = 0;
 unsigned short *frame_dst;
 unsigned short *frame_src;
 //unsigned short frame_temp[640*480];
@@ -895,76 +889,6 @@ unsigned short *frame_src;
 //char r_pix[640*480];
 //char g_pix[640*480];
 //char b_pix[640*480];
-
-static void fb_a320_thread(unsigned int src_weight, unsigned int src_height, unsigned int dst_weight, unsigned int dst_height,int mode)
-{
-	if (tvout_flag == 1)
-		return;
-  frame_dst = (unsigned short *)lcd_frame01;
-  frame_src = (unsigned short *)lcd_frame0;
-  unsigned short *lcd_frame_temp;
-#define FRACTION_STEP 0x10000
-  const unsigned int  x_fraction=src_weight*FRACTION_STEP/dst_weight;
-  const unsigned int  y_fraction=src_height*FRACTION_STEP/dst_height;
-  unsigned int x_temp = 0;
-  unsigned int y_temp = 0;
-  y_temp = y_fraction;
-  unsigned int original_size_offset = ((dst_height - src_height) >> 1)*dst_weight;
-
-  int i,j;
-#define A320_FULLSCREEN 1
-#define A320_ORIGINAL   2
-  switch (mode)
-  {
-    case A320_FULLSCREEN:
-      for(j = 0; j < dst_height; j++)
-      {
-        y_temp += y_fraction;
-        if(y_temp >= FRACTION_STEP)
-        {
-          y_temp -= FRACTION_STEP;
-          //scale horiontal
-          x_temp = x_fraction;
-          for(i = 0; i < dst_weight; i++)
-          {
-            x_temp += x_fraction;
-            *frame_dst = *frame_src;
-            if(x_temp >= FRACTION_STEP)
-            {
-              frame_src++;
-              x_temp -= FRACTION_STEP;
-            }
-            frame_dst++;
-          }
-          frame_src += dst_weight-320;
-        }
-        else
-        {
-          lcd_frame_temp = frame_dst - dst_weight;
-          for(i = 0; i < dst_weight; i++)
-          {
-            *frame_dst++ = *lcd_frame_temp++;
-          }
-        }
-      }
-      break;
-    case A320_ORIGINAL:
-      frame_dst += original_size_offset;
-      for(j = 0; j < src_height; j++)
-      {
-        frame_dst +=(dst_weight - src_weight)/2;
-        for(i = 0; i < src_weight; i++)
-        {
-          *frame_dst = *frame_src;
-          frame_dst++;
-          frame_src++;
-        }
-        frame_src += dst_weight-320;
-        frame_dst +=(dst_weight - src_weight)/2;
-      }
-      break;
-  }
-}
 
 static int fb_resize_thread(void *unused)
 {
@@ -1140,6 +1064,9 @@ static int jz4760fb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long 
         void __user *argp = (void __user *)arg;
 
 	switch (cmd) {
+	case FBIO_WAITFORVSYNC:
+		//printk("FBIO_WAITFORVSYNC");
+		break;
     case FBIOENBALECRTL:
         ctrl_enable();
         break;
@@ -1357,6 +1284,11 @@ static int jz4760fb_check_var(struct fb_var_screeninfo *var, struct fb_info *inf
  */
 static int jz4760fb_set_par(struct fb_info *info)
 {
+	struct myfb_par *par = info->par;
+	printk("YRES_VIRTUAL = %d, YRES = %d\n",info->var.yres_virtual,info->var.yres);
+	if (info->var.yres_virtual != info->var.yres)
+		printk("Required double buffer\n");
+		
 	//printk("jz4760fb_set_par, not implemented\n");
 	return 0;
 }
@@ -1401,29 +1333,16 @@ static int jz4760fb_blank(int blank_mode, struct fb_info *info)
 static int jz4760fb_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 {
 	struct lcd_cfb_info *cfb = (struct lcd_cfb_info *)info;
-	int dy;
-
+	
 	if (!var || !cfb) {
 		return -EINVAL;
 	}
 
-	if (var->xoffset - cfb->fb.var.xoffset) {
-		/* No support for X panning for now! */
-		return -EINVAL;
-	}
-
-	dy = var->yoffset;
-	D("var.yoffset: %d", dy);
-	if (dy) {
-		//dma0_desc0->databuf = (unsigned int)virt_to_phys((void *)lcd_frame0 + (cfb->fb.fix.line_length * dy));
-		//dma_cache_wback((unsigned int)(dma0_desc0), sizeof(struct jz4760_lcd_dma_desc));
-
-	}
-	else {
-		//dma0_desc0->databuf = (unsigned int)virt_to_phys((void *)lcd_frame0);
-		//dma_cache_wback((unsigned int)(dma0_desc0), sizeof(struct jz4760_lcd_dma_desc));
-	}
-
+	dma0_desc0->databuf = (unsigned int)virt_to_phys((void *)lcd_frame0 + 
+	((var->xoffset * info->var.bits_per_pixel) / 8) +
+	(var->yoffset * cfb->fb.fix.line_length));
+	dma_cache_wback((unsigned int)(dma0_desc0), sizeof(struct jz4760_lcd_dma_desc));
+	
 	return 0;
 }
 
@@ -1725,7 +1644,7 @@ static int jz4760fb_map_smem(struct lcd_cfb_info *cfb)
 	h = ( jz4760_lcd_info->osd.fg0.h > TVE_HEIGHT_PAL )?jz4760_lcd_info->osd.fg0.h:TVE_HEIGHT_PAL;
         printk("%s %d %d \n",__func__,w,h);
 #endif
-	needroom1 = needroom = ((w * bpp + 7) >> 3) * h;
+	needroom1 = needroom = ((w * bpp + 7) >> 3) * h * 3;
 
 #if defined(CONFIG_FB_JZ4760_LCD_USE_2LAYER_FRAMEBUFFER)
 	bpp = bpp_to_data_bpp(jz4760_lcd_info->osd.fg1.bpp);
@@ -1741,7 +1660,7 @@ static int jz4760fb_map_smem(struct lcd_cfb_info *cfb)
 
 #endif
         printk("%s %d %d \n",__func__,w,h);
-	needroom += ((w * bpp + 7) >> 3) * h;
+	needroom += ((w * bpp + 7) >> 3) * h * 3;
 #endif // two layer
 
 	for (page_shift = 0; page_shift < 13; page_shift++)
@@ -1751,9 +1670,9 @@ static int jz4760fb_map_smem(struct lcd_cfb_info *cfb)
 #if defined(CONFIG_JZ4760_HDMI_DISPLAY)
 	page_shift = 11;
 #endif
-	lcd_palette = (unsigned char *)__get_free_pages(GFP_KERNEL, 0);
-	lcd_frame0 = (unsigned char *)__get_free_pages(GFP_KERNEL, page_shift);
-    lcd_frame01 = (unsigned char *)__get_free_pages(GFP_KERNEL, page_shift);
+	lcd_palette = (unsigned char *)__get_free_pages(GFP_KERNEL | GFP_DMA, 0);
+	lcd_frame0 = (unsigned char *)__get_free_pages(GFP_KERNEL | GFP_DMA, page_shift);
+    lcd_frame01 = (unsigned char *)__get_free_pages(GFP_KERNEL | GFP_DMA, page_shift);
 
 	//maddrone add for mplayer trans fb
 	vmfbmem_addr = lcd_frame01;
@@ -2011,7 +1930,7 @@ static void jz4760fb_descriptor_init( struct jz4760lcd_info * lcd_info )
 		dma0_desc0->databuf = virt_to_phys((void *)lcd_frame0);
 		dma0_desc0->frame_id = (unsigned int)0x0000da00; /* DMA0'0 */
 	
-		frame_size0 = (LCD_SCREEN_W * LCD_SCREEN_H* 16) >> 3;
+		frame_size0 = (LCD_SCREEN_W * LCD_SCREEN_H * 16) >> 3;
 		frame_size0 /= 4;
 		dma0_desc0->cmd = frame_size0;
 		dma0_desc0->desc_size = (LCD_SCREEN_H << 16) | LCD_SCREEN_W;
@@ -2578,54 +2497,6 @@ static int screen_on_new(void)
 	return 0;
 }
 
-static void screen_open_bootlogo(void)
-{
-	struct lcd_cfb_info *cfb = jz4760fb_info;
-
-	__lcd_display_on();
-
-	int w,h;
-	w = LCD_SCREEN_W;
-	h = LCD_SCREEN_H;
-
-
-	unsigned short*ptr;
-	ptr = (unsigned short*)lcd_frame0;
-	unsigned short*src = l009_bootpic;
-	int i  = 0;
-#if 1
-	for(i = 0 ; i < w*h; i++)
-	{
-		*ptr++ = *src++;
-		//*ptr++ = 0xf800;//rgb red
-	}
-	dma_cache_wback((unsigned int)lcd_frame0, w * h * 2);
-
-	mdelay(300);
-#else
-	for(i = 0 ; i < w*h; i++)
-	{
-		*ptr++ = 0x07e0;
-	}
-	dma_cache_wback((unsigned int)lcd_frame0, w * h * 2);
-	mdelay(300);
-#endif
-
-	/* Really restore LCD backlight when LCD backlight is turned on. */
-	if (cfb->backlight_level) {
-#ifdef HAVE_LCD_PWM_CONTROL
-		if (!cfb->b_lcd_pwm) {
-			__lcd_pwm_start();
-			cfb->b_lcd_pwm = 1;
-		}
-#endif
-		__lcd_set_backlight_level(cfb->backlight_level);
-	}
-
-	cfb->b_lcd_display = 1;
-
-}
-
 static int jz4760fb_set_backlight_level(int n)
 {
 	struct lcd_cfb_info *cfb = jz4760fb_info;
@@ -2898,11 +2769,6 @@ void avout_ack_timer(unsigned long data)
 			ipu_driver_close_tv();
 
 		if (tvout_flag == 1){
-			if (lcd_a320_flag > 0){
-				memset(lcd_frame0,0x00,LCD_SCREEN_W*LCD_SCREEN_H*2);
-				memset(lcd_frame01,0x00,640*480*2);
-				dma0_desc0->databuf = virt_to_phys((void *)lcd_frame01);
-			}
 			mdelay(1000);
 		}
 		screen_on();
@@ -3012,8 +2878,25 @@ static int __devinit jz4760_fb_probe(struct platform_device *dev)
 	}
 
 	ctrl_enable();
+	__lcd_display_on();
+	//fill black
+	memset(lcd_frame0, 0x00, LCD_SCREEN_W * LCD_SCREEN_W * 2);
+	dma_cache_wback((unsigned int)lcd_frame0, LCD_SCREEN_W * LCD_SCREEN_W * 2);
+	mdelay(50);	//needed to avoid flash white screen
+	
+	/* Really restore LCD backlight when LCD backlight is turned on. */
 
-	screen_open_bootlogo();
+	if (cfb->backlight_level) {
+#ifdef HAVE_LCD_PWM_CONTROL
+		if (!cfb->b_lcd_pwm) {
+		__lcd_pwm_start();
+		cfb->b_lcd_pwm = 1;
+		}
+#endif
+		__lcd_set_backlight_level(cfb->backlight_level);
+	}
+	
+	cfb->b_lcd_display = 1;
 
 #ifdef AV_OUT_DETE
         init_timer(&avout_irq_timer);
@@ -3069,8 +2952,10 @@ static int __devexit jz4760_fb_remove(struct platform_device *pdev)
 static struct platform_driver jz4760_fb_driver = {
 	.probe	= jz4760_fb_probe,
 	.remove = jz4760_fb_remove,
+#ifdef CONFIG_PM
 	.suspend = jz4760_fb_suspend,
 	.resume = jz4760_fb_resume,
+#endif
 	.driver = {
 		.name = "jz-lcd",
 		.owner = THIS_MODULE,
@@ -3237,11 +3122,6 @@ static void allen_tv_out()
 		ipu_driver_close_tv();
 
 		if (tvout_flag == 1){
-			if (lcd_a320_flag > 0){
-				memset(lcd_frame0,0x00,LCD_SCREEN_W*LCD_SCREEN_H*2);
-				memset(lcd_frame01,0x00,640*480*2);
-				dma0_desc0->databuf = virt_to_phys((void *)lcd_frame01);
-			}
 			mdelay(1000);
 		}
 	#if 0 //allen del
@@ -3273,105 +3153,6 @@ static int proc_tvselect_write_proc(struct file *file, const char *buffer,
 	allen_tv_out();
 	
 	return count;
-}
-
-static int fb_resize_a320_original_thread(void *unused)
-{
-	printk("kernel frame buffer fb_resize_a320_original_thread start!\n");
-
-	while(1)
-	{
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule_timeout(HZ/20);
-		fb_a320_thread(320,240,LCD_SCREEN_W,LCD_SCREEN_H,A320_ORIGINAL);
-		if(resize_a320_go_out)
-		break;
-	}
-	resize_a320_original_task = 0;
-
-}
-static void fb_resize_a320_original_start()
-{
-	if (resize_a320_original_task != 0)
-		return;
-	resize_a320_go_out= 0;
-	resize_a320_original_task= kthread_run(fb_resize_a320_original_thread, NULL, "fb_a320_original");
-	if(IS_ERR(resize_a320_original_task))
-	{
-		printk("Kernel fb_a320_originalstart error!\n");
-		return;
-	}
-}
-static int fb_resize_a320_fullscreen_thread(void *unused)
-{
-  printk("kernel frame buffer resize thread start!\n");
-  while(1)
-  {
-    set_current_state(TASK_INTERRUPTIBLE);
-    schedule_timeout(HZ/20);
-    fb_a320_thread(320,240,LCD_SCREEN_W,LCD_SCREEN_H,A320_FULLSCREEN);
-    if(resize_a320_go_out)
-      break;
-  }
-	resize_a320_full_screen_task = 0;
-}
-static void fb_resize_a320_fullscreen_start()
-{
-	if (resize_a320_full_screen_task != 0)
-		return;
-	resize_a320_go_out = 0;
-	resize_a320_full_screen_task = kthread_run(fb_resize_a320_fullscreen_thread, NULL, "fb_a320_fullscreen");
-	if(IS_ERR(resize_a320_full_screen_task))
-	{
-		printk("Kernel fb_a320_fullscreen start error!\n");
-		return;
-	}
-}
-
-static int proc_lcd_a320_read_proc(
-			char *page, char **start, off_t off,
-			int count, int *eof, void *data)
-{
-	return sprintf(page, "%lu\n", lcd_a320_flag);
-}
-
-static int proc_lcd_a320_write_proc(
-			struct file *file, const char *buffer,
-			unsigned long count, void *data)
-{
-  int tmp_a320_flag;
-
-  tmp_a320_flag =  simple_strtoul(buffer, 0, 10);
-
-  if (tmp_a320_flag != lcd_a320_flag){
-	  lcd_a320_flag = tmp_a320_flag;
-  }else{
-	  return count;
-  }
-
-  if(lcd_a320_flag == 0)
-  {
-	  resize_a320_go_out = 1;
-	  if (!tvout_flag)
-	  	dma0_desc0->databuf = virt_to_phys((void *)lcd_frame0);
-  }
-  else if(lcd_a320_flag == 1)
-  {
-	  resize_a320_go_out = 1;
-	  memset(lcd_frame0,0x00,LCD_SCREEN_W*LCD_SCREEN_H*2);
-	  memset(lcd_frame01,0x00,LCD_SCREEN_W*LCD_SCREEN_H*2);
-	  dma0_desc0->databuf = virt_to_phys((void *)lcd_frame01);
-	  fb_resize_a320_original_start();
-  }
-  else if(lcd_a320_flag == 2)
-  {
-	  resize_a320_go_out = 1;
-	  memset(lcd_frame0,0x00,LCD_SCREEN_W*LCD_SCREEN_H*2);
-	  memset(lcd_frame01,0x00,LCD_SCREEN_W*LCD_SCREEN_H*2);
-	  dma0_desc0->databuf = virt_to_phys((void *)lcd_frame01);
-	  fb_resize_a320_fullscreen_start();
-  }
-  return count;
 }
 
 static int proc_tvout_read_proc(
@@ -3486,13 +3267,6 @@ static int __init jz4760_fb_init(void)
 		res->write_proc = proc_lcd_flush_write_proc;
 	}
 
-	res = create_proc_entry("jz/lcd_a320", 0, NULL);
-	if(res)
-	{
-		res->read_proc = proc_lcd_a320_read_proc;
-		res->write_proc = proc_lcd_a320_write_proc;
-		res->data = NULL;
-	}
 	res = create_proc_entry("jz/tvselect", 0, NULL);
 	if(res)
 	{
