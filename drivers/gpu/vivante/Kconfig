@@ -1,0 +1,16 @@
+#
+# VIVANTE_GPU support
+#
+
+menuconfig VIVANTE_GPU
+	tristate "VIVANTE_GPU"
+	depends on JZSOC
+	help
+	  VIVANTE_GPU
+
+
+config VIVANTE_GPU_GC200
+	tristate "VIVANTE_GPU_GC200"
+	depends on VIVANTE_GPU && (SOC_JZ4760 || SOC_JZ4760B)
+	help
+	  VIVANTE_GPU_GC200
